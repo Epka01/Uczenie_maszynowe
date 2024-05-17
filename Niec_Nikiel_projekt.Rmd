@@ -1,0 +1,1181 @@
+---
+title: "Projekt"
+author: "Ewelina Nieć, Julia Nikiel"
+date: "Ćwiczenia projektowe 01.12.2023"
+output: 
+  html_document:
+    code_folding: hide
+    theme: cerulean
+---
+
+```{css, echo=FALSE}
+table {margin: auto; border-top: 1px solid #666;
+border-bottom: 1px solid #666;}
+table thead th { border-bottom: 1px solid #ddd; }
+th, td { padding: 5px; }
+thead, tfoot, tr:nth-child(even) { background: #eee; }
+body { size:85px; font-size: 12pt; text-align: justify; margin-bottom: 35px;}
+caption { color:darkblue;}
+```
+
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+library(readr) 
+library(caret) 
+library(DALEX) 
+library(class)
+library(e1071) 
+library(ROSE) 
+library(ranger)
+library(randomForest) 
+library(imbalance) 
+library(gridExtra)
+library(ingredients) 
+library(knitr) 
+library(r2d3)
+library(ggplot2)
+```
+
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+Students <- read_csv("student-lpor.csv")
+Students$Medu = as.character(Students$Medu)
+Students$Fedu = as.character(Students$Fedu)
+
+for(i in 1:nrow(Students))
+{
+  if(Students$Medu[i] == '0')
+    Students$Medu[i] = 0
+  else if (Students$Medu[i] == '1' || Students$Medu[i] == '2' )
+    Students$Medu[i] = 1
+  else if(Students$Medu[i] == '3')
+    Students$Medu[i] = 2
+  else if(Students$Medu[i] == '4')
+    Students$Medu[i] = 3
+}
+
+for(i in 1:nrow(Students))
+{
+  if(Students$Fedu[i] == '0')
+    Students$Fedu[i] = 0
+  else if (Students$Fedu[i] == '1' || Students$Fedu[i] == '2' )
+    Students$Fedu[i] = 1
+  else if(Students$Fedu[i] == '3')
+    Students$Fedu[i] = 2
+  else if(Students$Fedu[i] == '4')
+    Students$Fedu[i] = 3
+}
+```
+
+# Opis danych {.tabset}
+
+Wysokie spożycie alkoholu jest poważnym zagrożeniem dla młodych ludzi, stąd celem projektu jest zbudowanie modelu, który na podstawie infomacji zebranych o studencie będzie w stanie wskazać nauczycielom uczniów, którzy mogą potrzebować pomocy. 
+
+Do projektu wykorzystano zestaw danych *'High School Alcoholism and Academic Performance'*, dostępny pod: 
+https://www.kaggle.com/datasets/gabrielluizone/high-school-alcoholism-and-academic-performance?fbclid=IwAR2_1VZpKde0RZtKbdWIZVVWq0Bik2z0-VXw6fqfRtDu2lUwq8Xn5y_uUj4 [data dostępu: 08.12.20233r.].
+
+Wybrany zestaw danych obejmuje informacje odnośnie 649 studentów oraz zawiera następujace zmienne:
+
+  - **sex**: płeć studenta ('F'- kobieta, 'M'- mężczyzna),
+  - **age**: wiek studenta,
+  - **address**: miejsce zamieszkania studenta ('U'- miasto, 'R'- obszar wiejski),
+  - **famsize**: rozmiar rodziny studenta ('LE3'- mniej niż 3 członków rodziny, 'GT3'- więcej niż 3 członków rodziny),
+  - **Pstatus**: status współżycia rodziców stydenta ('T'- rodzice mieszkają razem, 'A'- rodzice są w separacji ),
+  - **Medu**: poziom edukacji matki studenta (0 - brak, 1 - szkoła podstawowa, 2 - szkoła średnia, 3 - edukacja wyższa)
+  - **Fedu**: poziom edukacji ojca studenta (0 - brak, 1 - szkoła podstawowa, 2 - szkoła średnia, 3 - edukacja wyższa)
+  - **Mjob**: zawód wykonywany przez matkę studenta (nauczyciel ('teacher'), zawód w slużbie zdrowia ('health'),<br> zawód z sektora usług ('services'), niepracujący ('at_home'),
+  - **Fjob**: zawód wykonywany przez ojca studenta (nauczyciel ('teacher'), zawód w slużbie zdrowia ('health'), zawód z sektora usług ('services'), niepracujący ('at_home'),
+  - **traveltime**: czas dojazdu studenta do szkoły (1 - <15 min., 2 - 15 to 30 min., 3 - 30 min. do godziny, 4 - >1 godziny ),
+  - **studytime**: czas poswięcany tygodniowo przez studenta na naukę (1 - <2 godziny, 2 - 2 do 5 godzin, 3 - 5 do 10 godzin, <br> 4 - >10 godzin),
+  - **famsup**: czy student otrzymuje pomoc w nauce od rodziny (tak/nie),
+  - **paid**: czy student uczęszcza na płatne korepetycje (tak/nie),
+  - **activities**: czy student uczęszcza na zajęcia pozalekcyjne (ta/nie),
+  - **higher**: czy student wyraża chęć uzusyania dyplomu ukończenia studiów wyższych (tak/nie),
+  - **internet**: czy student posiada dostęp do internetu (tak/nie),
+  - **romantic**: czy student jest obecnie w związku (tak/nie),
+  - **famrel**: ocena ralecji rodzinnych (skala 1-5, gdzie 1 - bardzo złe, 5 - bardzo dobre),
+  - **freetime**: czas wolny po szkole (skala 1-5, gdzie 1 - bardzo mało, 5 - bardzo dużo),
+  - **goout**: czas spędzany z przyjaciółmi (skala 1-5, gdzie 1 - bardzo mało, 5 - bardzo dużo),
+  - **Dalc**: spożycie alkoholu w ciągu tygodnia (skala 1-5, gdzie 1 - bardzo mało, 5 - bardzo dużo),
+  - **Walc**: spożycie alkoholu w ciągu weekendu (skala 1-5, gdzie 1 - bardzo mało, 5 - bardzo dużo),
+  - **health**: obecny stan zdrowia studenta (skala 1-5, gdzie 1 - bardzo zły, 5 - bardzo dobry),
+  - **absences**: liczba nieobecności studenta w szkole.
+  
+
+Utworzono zmienną wynikową **Alc**, która przyjmuje następujące wartości:
+
+  - 0 - klasa negatywna - student nie ma problemu z nadużywaniem alkoholu,
+  - 1 - klasa pozytywna - student ma problem z nadużywaniem alkoholu. 
+  
+Dążąc do eliminacji przypadków zakwalifikowania osoby, która ma problem z alkoholem do grupy osób bez tego problemu za najważniejszy wskaźnik jakości modelu uznano czułość. 
+  
+## Wstępna analiza  {.active}
+
+### Przygotowanie danych
+
+```{r}
+Students$sex = as.factor(Students$sex)
+Students$address <- as.factor(Students$address)
+Students$famsize = as.factor(Students$famsize)
+Students$Pstatus = as.factor(Students$Pstatus)
+Students$Medu = as.factor(Students$Medu)
+Students$Fedu = as.factor(Students$Fedu)
+Students$Mjob = as.factor(Students$Mjob)
+Students$Fjob = as.factor(Students$Fjob)
+Students$traveltime = as.factor(Students$traveltime)
+Students$studytime = as.factor(Students$studytime)
+Students$famsup = as.factor(Students$famsup)
+Students$paid = as.factor(Students$paid)
+Students$activities = as.factor(Students$activities)
+Students$higher = as.factor(Students$higher)
+Students$internet = as.factor(Students$internet)
+Students$romantic = as.factor(Students$romantic)
+Students$famrel = as.factor(Students$famrel)
+Students$freetime = as.factor(Students$freetime)
+Students$goout = as.factor(Students$goout)
+Students$Dalc = as.factor(Students$Dalc)
+Students$Walc = as.factor(Students$Walc)
+Students$health = as.factor(Students$health)
+```
+
+Dla celów analizy dokonano podziału zmiennych *Mjob* i *Fjob* na następujące zmienne binarne:
+
+  - *Mjob_at_home*: 1 - ojciec dziecka jest bezrobotny, 0 - ojciec dziecka nie jest bezrobotny
+  - *Mjob_teacher*: 1 - ojciec dziecka to nauczyciel, 0 - ojciec dziecka nie jest nauczycielem
+  - *Mjob_services*: 1 - ojciec dziecka wykonuje zawód z zakresu usług, 0 - ojciec dziecka nie wykonuje zawodu z zakresu usług
+  - *Mjob_health*: 1 - ojciec dziecka pracuje w służbie zdrowia, 0 - ojciec nie pracuje w służbie zdrowia
+  - *Fjob_at_home*: 1 - matka dziecka jest bezrobotna, 0 - matka dziecka nie jest bezrobotna
+  - *Fjob_teacher*: 1 - matka dziecka to nauczyciel, 0 - matka dziecka nie jest nauczycielem
+  - *Fjob_services*: 1 - matka dziecka wykonuje zawód z zakresu usług, 0 - matka dziecka nie wykonuje zawodu z zakresu usług 
+  - *Fjob_health*: 1 - matka dziecka pracuje w służbie zdrowia, 0 - matka nie pracuje w służbie zdrowia 
+  
+```{r}
+# --------------------------------------
+Mjob_at_home <- c()
+Mjob_teacher <- c()
+Mjob_services <-c()
+Mjob_health <-c()
+
+Fjob_at_home <- c()
+Fjob_teacher <- c()
+Fjob_services <-c()
+Fjob_health <-c()
+
+for(i in 1:nrow(Students))
+{
+  if(Students$Mjob[i] == 'at_home')
+    Mjob_at_home[i] = 1
+  else Mjob_at_home[i] = 0
+}
+
+for(i in 1:nrow(Students))
+{
+  if(Students$Mjob[i] == 'teacher')
+    Mjob_teacher[i] = 1
+  else Mjob_teacher[i] = 0
+}
+
+for(i in 1:nrow(Students))
+{
+  if(Students$Mjob[i] == 'services')
+    Mjob_services[i] = 1
+  else Mjob_services[i] = 0
+}
+
+for(i in 1:nrow(Students))
+{
+  if(Students$Mjob[i] == 'health')
+    Mjob_health[i] = 1
+  else Mjob_health[i] = 0
+}
+
+for(i in 1:nrow(Students))
+{
+  if(Students$Fjob[i] == 'teacher')
+    Fjob_teacher[i] = 1
+  else Fjob_teacher[i] = 0
+}
+
+for(i in 1:nrow(Students))
+{
+  if(Students$Fjob[i] == 'at_home')
+    Fjob_at_home[i] = 1
+  else Fjob_at_home[i] = 0
+}
+
+for(i in 1:nrow(Students))
+{
+  if(Students$Fjob[i] == 'services')
+    Fjob_services[i] = 1
+  else Fjob_services[i] = 0
+}
+
+for(i in 1:nrow(Students))
+{
+  if(Students$Fjob[i] == 'health')
+    Fjob_health[i] = 1
+  else Fjob_health[i] = 0
+}
+
+Students = data.frame(Students, 
+                      Mjob_at_home,
+                      Mjob_teacher,
+                      Mjob_services,
+                      Mjob_health,
+                      Fjob_at_home,
+                      Fjob_teacher,
+                      Fjob_services,
+                      Fjob_health)
+
+
+Students$Mjob_at_home = as.factor(Students$Mjob_at_home)
+Students$Mjob_teacher = as.factor(Students$Mjob_teacher)
+Students$Mjob_services = as.factor(Students$Mjob_services)
+Students$Mjob_health = as.factor(Students$Mjob_health)
+Students$Fjob_at_home = as.factor(Students$Fjob_at_home)
+Students$Fjob_teacher = as.factor(Students$Fjob_teacher)
+Students$Fjob_services = as.factor(Students$Fjob_services)
+Students$Fjob_health = as.factor(Students$Fjob_health)
+```
+  
+**Wartości brakujące**
+
+W pierwszym etapie przeanalizowano występowanie wartości brakujących dla poszczególnych zmiennych. 
+
+```{r echo=FALSE}
+df1 <- data.frame("sex" = sum(is.na(Students$sex)),
+                  "age" = sum(is.na(Students$age)),
+                  "address" = sum(is.na(Students$address)),
+                  "famsize" = sum(is.na(Students$famsize)),
+                  "Pstatus" = sum(is.na(Students$Pstatus)),
+                  "Medu" = sum(is.na(Students$Medu)),
+                  "Fedu" = sum(is.na(Students$Fedu)),
+                  "Mjob" = sum(is.na(Students$Mjob)),
+                  "Fjob" = sum(is.na(Students$Fjob)),
+                  "traveltime" = sum(is.na(Students$traveltime)),
+                  "studytime" = sum(is.na(Students$studytime)),
+                  "famsup" = sum(is.na(Students$famsup)),
+                  "paid" = sum(is.na(Students$paid))
+)
+
+df2 <- data.frame("activities" = sum(is.na(Students$activities)),
+                  "higher" = sum(is.na(Students$higher)),
+                  "internet" = sum(is.na(Students$internet)),
+                  "romantic" = sum(is.na(Students$romantic)),
+                  "famrel" = sum(is.na(Students$famrel)),
+                  "freetime" = sum(is.na(Students$freetime)),
+                  "goout" = sum(is.na(Students$goout)),
+                  "Dalc" = sum(is.na(Students$Dalc)),
+                  "Walc" = sum(is.na(Students$Walc)),
+                  "health" = sum(is.na(Students$health)),
+                  "absences" = sum(is.na(Students$absences))
+)
+
+kable(df1, "simple", align = "c")
+kable(df2, "simple", align = "c")
+```
+
+Braki występują dla następujących zmiennych: *famsize*, *Pstatus*, *romantic*, *freetime* oraz *health*. Braki danych wynikać mogą z pominięcia odpowiedzi w przeprowadzanej ankiecie, co spowodowane mogło być zarówno przeoczeniem jak i niechęcią udzielenia informacji na dany temat. 
+
+Wartości brakujące wyeleminowane zostały z wykorzystaniem mody. 
+
+```{r}
+# USUWANIE BRAKÓW
+
+moda_romantic <- names(which.max(table(Students$romantic)))
+for (i in 1:nrow(Students)) {
+  if (is.na(Students[i,17])){
+    Students[i,17] = moda_romantic
+  }
+}
+
+moda_freetime <- names(which.max(table(Students$freetime)))
+for (i in 1:nrow(Students)) {
+  if (is.na(Students[i,19])){
+    Students[i,19] = moda_freetime
+  }
+}
+
+moda_health <- names(which.max(table(Students$health)))
+for (i in 1:nrow(Students)) {
+  if (is.na(Students[i,23])){
+    Students[i,23] = moda_health
+  }
+}
+
+moda_famsize <- names(which.max(table(Students$famsize)))
+for (i in 1:nrow(Students)) {
+  if (is.na(Students[i,4])){
+    Students[i,4] = moda_famsize
+  }
+}
+
+moda_Pstatus <- names(which.max(table(Students$Pstatus)))
+for (i in 1:nrow(Students)) {
+  if (is.na(Students[i,5])){
+    Students[i,5] = moda_Pstatus
+  }
+}
+
+```
+
+
+**Wartości odstające**
+
+```{r fig.align='center', echo=FALSE}
+par(mfcol=c(1,2))
+boxplot(Students$age, main='age')
+boxplot(Students$absences, main='absences')
+par(mfcol=c(1,1))
+```
+
+W wybranym zestawie danych występują dwie zmienne liczbowe: *age* oraz *absences*. Dla tych zmiennych przeanalizowano wartości odstające. W przypadku zmiennej *age* wiek 22 lat nie uznano za znacznie odstający od pozostałych wartości. Wysunięto przypuszczenie, że godziny nieobecności w szkole mogą mieć wpływ na zmienną wynikową, zatem na tym etapie projektu postanowiono nie usuwać wartości odstających.
+<br>
+
+**Zmienna wynikowa**
+
+Poprzez modyfikację zmiennej *Dalc*, czyli zmiennej odpowiedzialnej za spożycie alkoholu w ciągu tygodnia (w skali od 1 do 5), utworzono zmienną wynikową *Alc*, która przyjmuje następujące wartości:
+
+  - 0 - student nie ma problemu z nadużywaniem alkoholu,
+  - 1 - student ma problem z nadużywaniem alkoholu. 
+  
+Wartości 1-2 zmiennej *Dalc* przekształcono na wartość 0 zmiennej wynikowej. Wartości zmiennej prognozowanej odpowiadają wartości 3-5 zmiennej *Dalc*. Wartości wybrano biorąc pod uwagę, że badaną grupą są osoby w wieku nastolenim. Dlatego też zaniepokojące uznano już średnie spożycie alkoholu w ciągu tygodnia (*Dalc* = 3). Należy pamiętać również, że dane pozyskane są w wyniku przeprowadzenia ankiety, w związku z czym niektóre wartości (w tym zmiennej *Dalc*) mogą być zaniżone. 
+
+Zmienna *Dalc* została następnie usunięta ze zbioru danych, a na jej miejsce wrprowadzono zmienną *Alc*.
+
+```{r}
+Alc <- c()
+Students$Dalc = as.character(Students$Dalc)
+for(i in 1:nrow(Students))
+{
+  if(Students$Dalc[i] == '1' || Students$Dalc[i] == '2')
+    Alc[i] <- 0
+  else 
+    Alc[i] <-1
+  i=i+1
+}
+Students = Students[-21]
+Students = data.frame(Students, "Alc"= Alc)
+Students$Alc = as.factor(Students$Alc)
+```
+
+
+### Podstawowe statystyki
+
+W kolejnym etapie analiznie poddano podstawowe statystyki badanych zmiennych. 
+
+```{r}
+stat_age <- data.frame("Min." = min(Students$age),
+                   "Median" = median(Students$age), 
+                   "Mean" = round(mean(Students$age),2), 
+                   "Std." = round(sd(Students$age),2),
+                   "Max." = max(Students$age))
+
+stat_absences <- data.frame("Min." = min(Students$absences),
+                   "Median" = median(Students$absences), 
+                   "Mean" = round(mean(Students$absences),2), 
+                   "Std." = round(sd(Students$absences),2),
+                   "Max." = max(Students$absences))
+```
+
+
+```{r echo=FALSE}
+kable(stat_age, "simple", align = "c", caption = "age")
+```
+
+Badani studenci mają od 15 do 22 lat. Najwięcej studentów wśród badanej grupy jest w wieku 17 lat. 
+
+```{r echo=FALSE}
+kable(stat_absences, "simple", align = "c", caption = "absences")
+```
+
+Najczęściej nieobecność wynosiła 2 dni. Student z największą liczbą nieobecności nie uczęszczał na zajęcia łącznie 32 dni. <br> <br> <br>
+
+```{r echo=FALSE, fig.align='center', fig.width = 18, fig.height = 7}
+par(mfcol=c(1,3))
+barplot(summary(Students$sex), ylim= c(1,500), 
+        cex.axis=2, cex.names=2, col = 'lightblue',
+        main= "sex", cex.main=3.5)
+barplot(summary(Students$address), ylim= c(1,500),
+        cex.axis=2, cex.names=2, 
+        main="address", cex.main=3.5)
+barplot(summary(Students$famsize), ylim= c(1,500),
+        cex.axis=2, cex.names=2,col = 'lightblue',
+        main="famsize", cex.main=3.5)
+par(mfrow = c(1,1))
+```
+
+Wśród badanej grupy przeważają kobiety. Większość studentów mieszka w mieście. Większość rodzin studentów liczy więcej niż 3 członków. 
+<br><br>
+
+```{r echo=FALSE, fig.align='center', fig.width = 18, fig.height = 7}
+par(mfcol=c(1,3))
+barplot(summary(Students$studytime), ylim= c(1,400),
+        cex.axis=2, cex.names=2,
+        main="studytime", cex.main=3.5)
+barplot(summary(Students$Medu), ylim= c(1,400),
+        cex.axis=2, cex.names=2, col = 'lightblue',
+        main="Medu", cex.main=3.5)
+barplot(summary(Students$Fedu), ylim= c(1,400),
+        cex.axis=2, cex.names=2,
+        main="Fedu", cex.main=3.5)
+par(mfcol =c(1,1))
+```
+
+
+Najwięcej studentów tygodniowo na naukę poświęca od 2 do 5 godzin. Druga pod względem liczności grupa przeznacza na ten cel mniej niż 2 godziny. Znikoma grupa spędza przy książkach więcej niż 10 godzin w tygodniu. Najwięcej rodziców badanych studentów ukończyło jedynie szkołę podstawową. Grupa ta jest liczniejsza w przypadku ojców. Matki uczniów częściej niż ojcowie uzyskały dyplom ukończenia szkoły wyższej. Zarówno wśród matek jak i ojców występuje liczna grupa osób, które nie uzyskały edukacji. 
+<br><br>
+
+```{r echo=FALSE, fig.align='center', fig.width = 18, fig.height = 7}
+par(mfcol=c(1,3))
+barplot(summary(Students$Mjob), ylim= c(1,450),
+        cex.axis=2, cex.names=2, col = 'lightblue',
+        main= "Mjob", cex.main=3.5)
+barplot(summary(Students$Fjob), ylim= c(1,450),
+        cex.axis=2, cex.names=2,
+        main= "Fjob", cex.main=3.5)
+barplot(summary(Students$traveltime), ylim= c(1,450),
+        cex.axis=2, cex.names=2, col = 'lightblue',
+        main= "traveltime", cex.main=3.5)
+par(mfcol =c(1,1))
+```
+
+Zawody wykonywane przez rodziców studentów najczesciej należą do kategorii 'other', w związku z czym nie uzyskano dokładnych informacji o życiu zawodowym uczniów. Względnie dużo matek pracuje w usługach bądź nie wykonuje aktualnie żadnego zawodu i pozostaje w domu. Największa grupa studentów mieszka blisko szkoły i dojazd zajmuje im mniej niż 15 min. Nieco ponad 200 uczniów na dojazd musi przeznaczyć między 15 a 30 minut. Studenci, którzy spędzają więcej niż godzinę w drodze do szkoły stanowią znikomą grupę wśród badanych. Odnosząc się do wartości zmiennej *addres*, można przypuszczać, że są to studenci mieszkający na terenach wiejskich, bowiem stanowią oni mniejszą grupę wśród badanych. 
+<br><br>
+
+```{r echo=FALSE, fig.align='center', fig.width = 18, fig.height = 7}
+par(mfcol=c(1,3))
+barplot(summary(Students$Pstatus), ylim= c(1,700),
+        cex.axis=2, cex.names=2,
+        main= "Pstatus", cex.main=3.5)
+barplot(summary(Students$famsup), ylim= c(1,700),
+        cex.axis=2, cex.names=2, col = 'lightblue',
+        main= "famsup", cex.main=3.5)
+barplot(summary(Students$paid), ylim= c(1,700),
+        cex.axis=2, cex.names=2,
+        main= "paid", cex.main=3.5)
+par(mfcol =c(1,1))
+```
+
+Przeważająca część rodziców badanych studentów mieszka razem. Mniej niż 100 uczniów zaznaczyło, że rodzice są w separacji. Ponad połowa studentów (tj. około 400) deklaruje, że otrzymuje wsparcie przy nauce ze strony rodziny. Należy jednak pamietać, że wspomniane dane należą do wrażliwych w związku z czym istnieje możliwość udzielenie odpowiedzi w ankiecie niezgodnie ze stanem rzeczywistym. Nieco ponad 600 studentów nie uczęszcza na płatne zajęcia pozalekcyjne. 
+<br><br>
+
+```{r echo=FALSE, fig.align='center',fig.width = 18, fig.height = 7}
+par(mfcol=c(1,3))
+barplot(summary(Students$activities), ylim= c(1,650),
+        cex.axis=2, cex.names=2, col = 'lightblue',
+        main= "activities", cex.main=3.5)
+barplot(summary(Students$higher), ylim= c(1,650),
+        cex.axis=2, cex.names=2,
+        main= "higher", cex.main=3.5)
+barplot(summary(Students$internet), ylim= c(1,650),
+        cex.axis=2, cex.names=2, col = 'lightblue',
+        main= "internet", cex.main=3.5)
+par(mfcol =c(1,1))
+```
+
+W przypadku uczęszczania na zajęcia pozalekcyjne udzielone odpowiedzi rozkładają się dość równomiernie. Nieco więcej studentów nie bierze udziału w takich zajęciach. Odnosząc się do rozkąłdu zmiiennej *paid*, można uznać, że w znacznej części uwzględniane zajęcia są bezpłatne. Około 600 badanych studentów wyraża chęć kontynuowania nauki i uzyskania dyplomu ukończenia studiów wyższych. Znaczna część studentów posiada dostęp do internetu, jednak nieco ponad 100 uczniów takowego nie ma. 
+<br><br>
+
+```{r echo=FALSE, fig.align='center', fig.width = 18, fig.height = 7}
+par(mfcol=c(1,3))
+barplot(summary(Students$romantic), ylim= c(1,450),
+        cex.axis=2, cex.names=2,
+        main= "romantic", cex.main=3.5)
+barplot(summary(Students$famrel), ylim= c(1,450),
+        cex.axis=2, cex.names=2, col = 'lightblue',
+        main= "famrel", cex.main=3.5)
+barplot(summary(Students$freetime), ylim= c(1,450),
+        cex.axis=2, cex.names=2,
+        main= "freetime", cex.main=3.5)
+par(mfcol =c(1,1))
+```
+
+Znaczna część studentów (nieco ponad 400) deklaruje, że w momencie uzupełniania ankiety nie mają partera/parterki. Przeważająca grupa badanych (blisko połowa) ocenia relacje rodzinne jako dobre. Istnieje jednak nieliczna grupa uczniów, która ocenia relacje w swojej rodzienie źle bądź bardzo źle. W przypadku czasu wolnego po szkole najwięcej studentów znalazło się na środku skali, zatem zaznczyło, że średnio dysponuje czasem wolnym. 
+<br><br>
+
+```{r echo=FALSE, fig.align='center', fig.width = 18, fig.height = 7}
+par(mfcol=c(1,3))
+barplot(summary(Students$goout), ylim= c(1,350), 
+        cex.axis=2, cex.names=2, col = 'lightblue',
+        main= "goout", cex.main=3.5)
+barplot(summary(Students$Walc), ylim= c(1,350), 
+        cex.axis=2, cex.names=2,
+        main= "Walc", cex.main=3.5)
+barplot(summary(Students$health), ylim= c(1,350), 
+        cex.axis=2, cex.names=2, col = 'lightblue',
+        main= "health", cex.main=3.5)
+par(mfcol =c(1,1))
+```
+
+Najwięcej studentów określiło, że średnio spędza czas z przyjaciółmi. Mniej niż 50 uczniów zadeklarowało, że jest tego czasu bardzo mało. W przypadku spożycia alkoholu w ciągu weekendu uczniowe przeważnie zaznaczali odpowiedź 'bardzo mało'. Należy jednak mieć na uwadze ewentualną niecheć do przyznania się. Zatem mimo anonimowości ankiety uzyskane odpowiedzi mogą być niezgodne z prawdą. Mniej niż 50 studentów przyznało, że spożywa dużo alkoholu w ciągu dni weekendowych. Najwięcej studentów ocenia swój stan zdrowia jako bardzo dobry. Około 150 uczniów określiłoby go jednak jako bardzo zły bądź zły. 
+<br><br>
+
+Ze względu na małe zróżnicowanie zmiennych *paid* i *higher* zdecydowano o usunięciu ich ze zbioru danych. 
+
+```{r}
+Students = Students[-13]
+Students = Students[-14]
+```
+```{r echo=FALSE}
+# usunięcie zmiennych Mjob i Fjob
+Students = Students[c(-8,-9)]
+```
+
+
+### Zbalansowanie zbioru
+
+```{r fig.align = 'center', fig.width = 5, fig.height = 5}
+barplot(summary(Students$Alc), ylim = c(0,650),col = 'lightblue')
+```
+
+W wyniku przekształcenia zmiennej *Dalc* większość studentów została zakwalifikowana do negatywnej klasy zmiennej wynikowej. Badany zbiór danych jest niezbalansowany.
+
+### Podział na zbiór uczący i testowy
+
+Podziału na zbior uczący i testowy dokonano w proporcji 80-20%. 
+
+```{r}
+# 80:20
+set.seed(1)
+index <- sample(nrow(Students),519,replace = F)
+data_train  <- Students[index, ]
+data_test <- Students[-index, ]
+```
+
+## Resampling
+
+W celu zbalansowania zbioru uczącego wykorzystano techniki resamplingu. 
+
+**Oversampling**
+
+Oversampling - polega na zwiększeniu liczby obserwacji klasy mniejszościowej w celu zrównoważenia proporcji klas. Do wykonania oversamplingu wykorzystano funkcje *ROSE* (Random Over-Sampling Examples).
+
+Funkcja *ROSE* wspomaga zadanie klasyfikacji binarnej w obecności rzadkich klas. Generuje syntetyczny, zrównoważony, zestaw danych symulowany zgodnie z metodą wygładzonego bootstrapu. ROSE wybiera obserwację należącą do klasy k i generuje nowe przykłady w jej sąsiedztwie, gdzie szerokość sąsiedztwa jest określana przez zmienną Hk. Użytkownik może zmniejszyć Hk, zmieniając argumenty h.mult.majo i h.mult.mino. Balansowanie reguluje argument p.
+
+
+```{r warning=FALSE, message=FALSE, fig.align='center',fig.width = 5, fig.height = 5}
+set.seed(1)
+oversampled_data_train <- ROSE(Alc~.,
+                         data = data_train,
+                         seed = 1,
+                         N = 2*nrow(data_train))$data
+
+barplot(summary(oversampled_data_train$Alc), 
+        ylim = c(0,600), col = 'lightblue')
+```
+
+**Undersampling**
+
+Undersampling - oznacza zmniejszenie liczby obserwacji klasy większościowej, aby dopasować się do liczby obserwacji klasy mniejszościowej. Do przeprowadzenia undersamplingu wykorzystano funkcję *ovun.sample*.
+
+Funkcja *ovun.sample* dobiera próbkę z klasy większościowej, aby uzyskać pożądaną liczbę obserwacji, a jednocześnie zachować wszystkie obserwacje z klasy mniejszościowej.
+
+```{r warning=FALSE, message=FALSE, fig.align='center', fig.width = 5, fig.height = 5}
+undersampled_data_train <- ovun.sample(Alc~., 
+                                       data = data_train,
+                                       seed = 1,
+                                       method = "under",
+                                       p = 0.5
+                                       )$data
+
+barplot(summary(undersampled_data_train$Alc), 
+        ylim = c(0,600), col = 'lightblue')
+```
+
+### Podsumowanie
+
+Do budowy modeli postanowiono wykorzystać zbiór uczący zbalansowany za pomocą oversamplingu. Decyzja ta podyktowana jest znacznym zmiejszeniem zbioru uczącego, które powstało przy wykorzystaniu undersamplingu. Liczba dostępnych obserwacji w zbiorze uczącym spadł do zaledwie 117 (w przypadku zbioru przed resamplingiem było to 519 obserwacji).
+
+```{r  message=FALSE, warning=FALSE}
+data_train <- oversampled_data_train
+data_train$age <- round(data_train$age,0)
+data_train$absences <- round(data_train$absences,0)
+```
+
+## Metody uczenia maszynowego
+
+### Lasy losowe
+
+Pierwszą metodą wykorzystaną do budowy modelu są lasy losowe. <br>
+Wartości wskaźników dla wybranego lasu losowego przedstawiono w tabeli poniżej. 
+
+```{r  message=FALSE, warning=FALSE}
+set.seed(1)
+randomF <- randomForest(x = data_train[-28],
+                        y = data_train$Alc,
+                        ntree = 300,
+                        mtry = 9,
+                        nodesize = 4)
+
+pred_test <- predict(randomF, newdata = data_test[-28])
+pred_train <- predict(randomF, newdata = data_train[-28])
+c2 <- confusionMatrix(table(pred_test, data_test$Alc))
+c1 <- confusionMatrix(table(pred_train, data_train$Alc))
+
+df_randomF <-  data.frame('zbiór uczący' =
+                            c(round(c1$overall[1],4),
+                              round(c1$byClass[2],4),
+                              round(c1$byClass[1],4)),
+                  'zbiór testowy' =
+                    c(round(c2$overall[1],4),
+                      round(c2$byClass[2],4),
+                      round(c2$byClass[1],4)),
+                  row.names = c("dokładność","czułość","specyficzność"))
+knitr::kable(df_randomF, "simple", align ='llll')
+```
+
+Dokładność modelu na zbiorze uczącym osiągneła nieco ponad 90%, co świadczy o dobrej klasyfikacji zarówno wartości pozytywnych jak i negatywnych. Specyficzność uzyskano na poziomie około 95%, czułość natomiast wynosiła jedynie niecałe 53%. Zatem model lepiej radzi sobie z poprawną klasyfikacją negatywnych wartości niż z przypisaniem odpowiednio wartości pozytywnych. Wszystkie wskaźniki dla zbioru uczącego osiągnęły wartość 1, co w porównaniu z wartościami dla zbioru testowego świadczy o przeuczeniu modelu. 
+<br>
+
+**Ważność zmiennych** 
+```{r, fig.align='center'}
+varImpPlot(randomF, n.var = 9)
+```
+
+Najwięszy wpływ na wynik klasyfikacji ma częstość spożywania alkoholu w ciągu weekendu (*Walc*). Za istotne uznać można również czas spędzony z przyjaciółmi (*goout*) lub ilość czasu wolnego (*freetime*). Płeć oraz wiek studenta znalazły się odpowiednio na 4 i 5 miejscu. Wpływ zmiennej *Walc* jest znacząco większy niż pozostałych zmiennych uwzględnionych na wykresie. Zmienne nieuwzględnione mają znikomy wpływ na wartość prognozy.
+
+### SVM
+
+Drugi model zbudowano z wykorzystaniem algorytmu SVM z jądrem radialnym. <br>
+Wartości wskaźników jakości modelu przedstawiono w tabeli poniżej.
+
+```{r}
+set.seed(1)
+svm_radial <- svm(Alc~.,
+                  data = data_train,
+                  kernel = "radial")
+
+predictions_train <- predict(svm_radial, newdata = data_train[-28])
+c1 <- confusionMatrix(table(predictions_train, data_train$Alc))
+
+predictions_test <- predict(svm_radial, newdata = data_test[-28])
+c2 <- confusionMatrix(table(predictions_test, data_test$Alc))
+
+# wskaźniki
+
+df_svm <-  data.frame('zbiór uczący' =
+                        c(round(c1$overall[1],4),
+                          round(c1$byClass[2],4),
+                          round(c1$byClass[1],4)),
+                  'zbiór testowy' =
+                    c(round(c2$overall[1],4),
+                      round(c2$byClass[2],4),
+                      round(c2$byClass[1],4)),
+                  row.names = c("dokładność","czułość","specyficzność"))
+knitr::kable(df_svm, "simple", align ='llll')
+```
+
+W tym przypadku model zdołał zakwalifikować poprawnie niecałe 84% wartości pozytywnych i negatywnych w zbiorze uczącym (osiągnięto dokładość na poziomie 83,85%). Czułość, czyli wskaźnik, który uznano za najważniejszy, wyniosła nieco ponad 70%. Utworzony model lepiej radzi sobie jednak z poprawną klasyfikacją negatywnych wartości, bowiem specyficzność na zbiorze testowym wyniosła 85,84%. Analizując różnice wartości poszczególnych wskaźników między zbiorem uczącym i testowym uzyskany model uznano za przeuczony. 
+
+### Regresja logistyczna
+
+Do budowy ostatniego modelu wykorzystao regresję logistyczną. 
+
+```{r}
+set.seed(1)
+# Create the logistic regression model
+reg <- glm(Alc ~ ., 
+             data = data_train, 
+             family = "binomial")
+
+# Make predictions 
+predicted_probs_train <- predict(reg, data_train, type = "response")
+predicted_classes_train <- ifelse(predicted_probs_train > 0.5, 1, 0)
+predicted_probs_test <- predict(reg, data_test, type = "response")
+predicted_classes_test <- ifelse(predicted_probs_test > 0.5, 1, 0)
+
+# Create the confusion matrix
+c1 <- confusionMatrix(table(predicted_classes_train, data_train$Alc))
+c2 <- confusionMatrix(table(predicted_classes_test, data_test$Alc))
+
+df_reg <-  data.frame('zbiór uczący' =
+                        c(round(c1$overall[1],4),
+                          round(c1$byClass[2],4),
+                          round(c1$byClass[1],4)),
+                  'zbiór testowy' =
+                    c(round(c2$overall[1],4),
+                      round(c2$byClass[2],4),
+                      round(c2$byClass[1],4)),
+                  row.names = c("dokładność","czułość","specyficzność"))
+knitr::kable(df_reg, "simple", align ='llll')
+```
+
+Niecałe 53% pozytywnych wartości został przypisany poprawnie (czulość na zbiorze testowym wyniosła 52,94%). Lepsze wyniki osiągnięto w przypadku poprawnej klasyfiikacji wartości negatywnych, bowiem specyficzność w przypadku zbioru testowego wyniosła 88%. Dokładność na zbiorze testowym osiągnięto na poziomie 83%. Model uznano za przeuczony. 
+
+### Porównanie wyników
+
+```{r echo=FALSE}
+df_testowy <- data.frame(
+  'las losowy' = c(df_randomF[1,2], df_randomF[2,2], df_randomF[3,2]),
+  'svm' = c(df_svm[1,2],df_svm[2,2], df_svm[3,2]),
+  'regresja logistyczna' = c(df_reg[1,2], df_reg[2,2], df_reg[3,2]),
+  row.names = c("dokładność","czułość","specyficzność"))
+
+kable(df_testowy, 'simple', align ='ccccc', caption = "Zbiór testowy")
+```
+
+Najwyższą dokładność na zbiorze testowym uzyskano w przypadku wykorzystania lasu losowego. W tym modelu 90% wartości pozytywnych i negatywnych został poprawnie zakwalifikownay. 
+
+Dla modelu z wykorzystaniem lasu losowego uzyskano również najwyższą specyficzność, która wynosiła nieco ponad 95%. Najmniejszy procent poprawnie przypisanych negatywnych wartości osiągnięto w przypadku regresji logistycznej. 
+
+Za najważniejszy wskaźnik jakości modelu uznano czułość, która najwyższą wartość osiągnęła dla modelu zbudowanego z wykorzystaniem algorytmu SVM. W przypadku tego modelu 70% pozytywnych wartości został zakwalifikowany poprawnie. Mimo wysokich wartości dokładności i specyficzności osiągniętych dla modelu lasu losowego uzyskana czułość wyniosła jedynie niecałe 53%. Wartość ta znacznie odbiega od wartości uzyskanej w modelu SVM. 
+
+Ze wzlędu na chęć eliminacji przypadków zakwalifikowania osoby, która ma problem z alkoholem do grupy osób bez tego problemu, za najlepszy uznano model zbudowany z wykorzystaniem algorytmu SVM z jądrem radialnym. To dla tego modelu osiągnięto najwyższą czułość, przy jednoczesnym zachowaniu wartości pozostałych wskaźników na zadowalającym poziomie. 
+<br><br>
+
+
+## Interpretowalność
+
+W następnym etapie projektu przeprowadzono analize interpretowalnosci modelu. Wykorzystano do tego model regresji logistycznej. 
+
+### Wybrana obserwacja
+
+```{r fig.align='center', echo=FALSE}
+obs <- data_train[170,]
+df <- data.frame( 
+        "sex" = obs$sex,
+        "age" = obs$age,
+        "adress" = obs$address, 
+        "famsize" = obs$famsize, 
+        "Pstatus" = obs$Pstatus, 
+        "Medu" = obs$Medu,
+        "Fedu" = obs$Fedu)
+
+df1 <- data.frame(
+        "traveltime" = obs$traveltime,
+        "studytime" = obs$studytime, 
+        "famsup" = obs$famsup, 
+        "activities" = obs$activities, 
+        "internet" = obs$internet,
+        "romantic" = obs$romantic,
+        "famrel" = obs$famrel)
+
+df3 <- data.frame(
+        "freetime" = obs$freetime, 
+        "goout" = obs$goout, 
+        "Walc" = obs$Walc, 
+        "health" = obs$health,
+        "absences" = round(obs$absences,0),
+        "Alc" = obs$Alc)
+
+df4 <- data.frame(
+        "Mjob_at_home" = obs$Mjob_at_home,
+        "Mjob_teacher" = obs$Mjob_teacher, 
+        "Mjob_services" = obs$Mjob_services, 
+        "Mjob_health" = obs$Mjob_health)
+df5 <- data.frame(
+        "Fjob_at_home" = obs$Fjob_at_home,
+        "Fjob_teacher" = obs$Fjob_teacher,
+        "Fjob_services" = obs$Fjob_services,
+        "Fjob_health" = obs$Fjob_health)
+
+kable(df, "simple", align = "ccccccc")
+kable(df1, "simple", align = "ccccccc")
+kable(df3, "simple", align = "ccccc")
+kable(df4, "simple", align = "ccccc")
+kable(df5, "simple", align = "ccccc")
+```
+
+Wybraną obserwacją jest dziewczynka w wieku 15 lat. Na potrzeby projektu przyjęto, że nazywa się Ania. Mieszka ona z rodzicami i posiada rodzeństwo. Ocenia ona swoje relację z rodziną jako dobre.  Zgodnie z uzupełnioną ankietą nie otrzymuje ona pomocy od rodziny podczas nauki oraz nie uczęszcza na zajęcia pozalekcyjne. Rodzice Ani ukończyli studia oraz oboje pracują w sektorze usług. Mieszka ona w mieście i na dojazd do szkoły potrzebuje od 15 do 30 min. Ania jest obecnie w związku i przeznacza dużo czasu na wyjście ze znajomymi. Dziewczynka poświęca tygodniowo od 2 do 5 godzin na naukę oraz deklaruje że ma dużo czasu wolnego. W przypadku Ani odnotowano jedynie 3 nieobecnośći w szkole. W uzupełnionej ankiecie dziewczynka zadeklarowała średnie spożycie alkoholu podczas weekendu. Utworzona zmienna wynikowa wskazuje, że Ania spożywa mało lub wcale alkoholu w ciągu tygodnia. 
+
+### Profile ceteris-paribus (PCP)
+
+```{r warning=FALSE, message=FALSE, results='hide'}
+explain_glm <- explain(model = reg,
+                       data = data_train[,-28],
+                       y = data_train$Alc)
+
+pcp <- predict_profile(explainer = explain_glm,
+                       new_observation = obs)
+# -------------------------------------------------------------------
+p1 <- plot(pcp, variables = c("age"))
+p2 <- plot(pcp, variables = c("absences"))
+
+p3 <- plot(pcp, 
+     variables = c("sex"), 
+     variable_type = "categorical", categorical_type = "bars") + ggtitle("Ceteris-paribus profile", "") 
+p4 <- plot(pcp, 
+     variables = c("address"), 
+     variable_type = "categorical", categorical_type = "bars") + ggtitle("Ceteris-paribus profile", "") 
+p5 <- plot(pcp, 
+     variables = c("famsize"), 
+     variable_type = "categorical", categorical_type = "bars") + ggtitle("Ceteris-paribus profile", "") 
+p6 <- plot(pcp, 
+     variables = c("Pstatus"), 
+     variable_type = "categorical", categorical_type = "bars") + ggtitle("Ceteris-paribus profile", "") 
+p7 <- plot(pcp, 
+     variables = c("Medu"), 
+     variable_type = "categorical", categorical_type = "bars") + ggtitle("Ceteris-paribus profile", "") 
+p8 <- plot(pcp, 
+     variables = c("Fedu"), 
+     variable_type = "categorical", categorical_type = "bars") + ggtitle("Ceteris-paribus profile", "") 
+p9 <- plot(pcp, 
+     variables = c("traveltime"), 
+     variable_type = "categorical", categorical_type = "bars") + ggtitle("Ceteris-paribus profile", "") 
+p10 <- plot(pcp, 
+     variables = c("studytime"), 
+     variable_type = "categorical", categorical_type = "bars") + ggtitle("Ceteris-paribus profile", "") 
+p11 <- plot(pcp, 
+     variables = c("famsup"), 
+     variable_type = "categorical", categorical_type = "bars") + ggtitle("Ceteris-paribus profile", "") 
+p12 <- plot(pcp, 
+     variables = c("activities"), 
+     variable_type = "categorical", categorical_type = "bars") + ggtitle("Ceteris-paribus profile", "") 
+p13 <- plot(pcp, 
+     variables = c("internet"), 
+     variable_type = "categorical", categorical_type = "bars") + ggtitle("Ceteris-paribus profile", "") 
+p14 <- plot(pcp, 
+     variables = c("romantic"), 
+     variable_type = "categorical", categorical_type = "bars") + ggtitle("Ceteris-paribus profile", "") 
+p15 <- plot(pcp, 
+     variables = c("famrel"), 
+     variable_type = "categorical", categorical_type = "bars") + ggtitle("Ceteris-paribus profile", "") 
+p16 <- plot(pcp, 
+     variables = c("freetime"), 
+     variable_type = "categorical", categorical_type = "bars") + ggtitle("Ceteris-paribus profile", "") 
+p17 <- plot(pcp, 
+     variables = c("goout"), 
+     variable_type = "categorical", categorical_type = "bars") + ggtitle("Ceteris-paribus profile", "") 
+p18 <- plot(pcp, 
+     variables = c("Walc"), 
+     variable_type = "categorical", categorical_type = "bars") + ggtitle("Ceteris-paribus profile", "") 
+p19 <- plot(pcp, 
+     variables = c("health"), 
+     variable_type = "categorical", categorical_type = "bars") + ggtitle("Ceteris-paribus profile", "") 
+p20 <- plot(pcp, 
+     variables = c("Mjob_at_home"), 
+     variable_type = "categorical", categorical_type = "bars") + ggtitle("Ceteris-paribus profile", "") 
+p21 <- plot(pcp, 
+     variables = c("Mjob_teacher"), 
+     variable_type = "categorical", categorical_type = "bars") + ggtitle("", "") 
+p22 <- plot(pcp, 
+     variables = c("Mjob_services"), 
+     variable_type = "categorical", categorical_type = "bars") + ggtitle("", "") 
+p23 <- plot(pcp, 
+     variables = c("Mjob_health"), 
+     variable_type = "categorical", categorical_type = "bars") + ggtitle("", "") 
+p24 <- plot(pcp, 
+     variables = c("Fjob_at_home"), 
+     variable_type = "categorical", categorical_type = "bars") + ggtitle("Ceteris-paribus profile", "") 
+p25 <- plot(pcp, 
+     variables = c("Fjob_teacher"), 
+     variable_type = "categorical", categorical_type = "bars") + ggtitle("", "") 
+p26 <- plot(pcp, 
+     variables = c("Fjob_services"), 
+     variable_type = "categorical", categorical_type = "bars") + ggtitle("", "") 
+p27 <- plot(pcp, 
+     variables = c("Fjob_health"), 
+     variable_type = "categorical", categorical_type = "bars") + ggtitle("", "") 
+```
+
+```{r fig.align='center', fig.width = 10, fig.height = 4, echo=FALSE}
+grid.arrange(p1, p2, nrow = 1)
+```
+
+Wraz z wiekiem zwiększa się prawdopodobieństwo wystąpienia u Ani problemu z nadużywaniem alkoholu. W przpadku gdyby Ania miała 22 lata  wartość predykcji wyniosłaby do blisko 100%, co oznaczałoby predykcję pozytywną jednoznaczą problemowi z alkohlem. Podobna sytuacja występuje w przypadku nieobecności w szkole. Czym więcej dni szkolnych opuszcza Ania tym większa wartosć zmiennej wynikowej. W przypadku tej zmiennej należy pamiętać, że nieobecność w szkole wynikać może z wielu różnych powodów, w związku z czym może ona nie mieć przełożenia na wartość zmiennej prognozowanej, a występująca zależność może być przypadkowa. W przypadku zmiennej *age* wzrost wartości predykcji wraz ze wzrostem wartości tej zmiennej nie stanowi zaskoczenia, bowiem po osiągnięciu pełnoletności spożywanie alkoholu nie jest prawnie zabronione, w związku z czym można spodziewać się jego wzrostu. 
+
+```{r fig.align='center', fig.width = 10, fig.height = 4, echo=FALSE}
+grid.arrange(p3, p4, nrow = 1)
+```
+
+W przypadku gdyby wybraną obserwacją był chłopiec to przy niezmienionych pozostałych wartościach zmiennych odnotowanoby nieznaczny wzrost wartosci predykcji (wzrosłaby ona o 0.01). Gbydy Ania przeprowadziła się na tereny wiejskie to również odnotowano by wzrost wartości predykcji. 
+
+```{r fig.align='center', fig.width = 10, fig.height = 4, echo=FALSE}
+grid.arrange(p5, p6, nrow = 1)
+```
+
+Analiza powyższych wykresów prowadzi do wniosku, że zmiana sytuacji rodzinnej Ani pozytywnie by się dla niej skończyła. Bowiem zarówno zmniejszenie liczności jej rodziny jak i separacja rodziców zmniejszyłyby wartości zmiennej wynikowej. W przypadku zmniennej *famsize* odnotowano by spadek o niecałe 30 punktów procentowych. Mniejszy spadek odnotowano dla zmiany wartości zmiennej *Pstatus*. Obie sytuacje różnią się jednak od obrazu panującego w społeczeństwie. Powszechnie przyjmuje się bowiem, że dzieci z rodzin gdzie rodzice z różnych powodów znajdują się z sepracji, sprawiają więcej problemów wychowawczych. W związku z tym przypuszczać również można, że to one częściej sięgałaby po alkohol.
+
+```{r fig.align='center', fig.width = 10, fig.height = 4, echo=FALSE}
+grid.arrange(p7, p8, nrow = 1)
+```
+
+Zmienne *Medu* oraz *Fedu* odnoszą się odpowiednio do pozimou edukacji mamy oraz taty Ani. Oboje rodziców dziewczynki otrzymało dyplom ukończenia studiów. W przypadku poziomu edukacji ojca otrzymano inne wartości zmiennej prognozowanej niż dla poziomu edukacji matki. Gdyby mama Ani nie otrzymała edukacji lub  zakończyła ją na poziomie szkoły średniej wówczas odnotowano by wzrost wartości predykcji. Inaczej w przypadku gdy mama ukończyłaby jedynie szkołę podstawową, wówczas wartość zmiennej wynikowej znacznie by spadła (o ponad 30 punktów procentowych). Zmiana poziomu edukacji taty Ani w każdym przypadku kończyłaby się obniżeniem wartości predykcji. Największy spadek odnotowanoby, gdyby tata dziewczynki nie ukończył nawet szkoły podstawowej, wówczas predykcja osiągnęłaby poziom 0% (spadek o niecałe 70 punktów procentowych). 
+
+```{r fig.align='center', fig.width = 10, fig.height = 4, echo=FALSE}
+grid.arrange(p9, p10, nrow = 1)
+```
+
+Znaczy spadek (ponad 50 punktów procentowych) wartości zmniennej objaśnianej odnotowanyby w przypadku, gdyby Ania musiała poświęcić ponad godziny na dojazd do szkoły. Zmniejszenie czasu dojazdu do szkoły poniżej 15 minut również wpłynełoby na zmniejszenie wartości predykcji. Wzrost odnotowanoby jedynie w przypadku poświęcenia na dojazd od 30 min do godziny. 
+
+Ania przeznacza na naukę od 2 do 5 godzin tygodniowo. Wzrost wartości predykcji o około 12 punktów procentowych odnotowano zarówno w przypadku zmniejszenia czasu nauki do mniej niż 2 godzin tygodniowo jak i zwiększenia go do ponad 10 godzin. W przypadku gdyby Ania uczyła się od 5 do 10 godzin w ciągu tygodnia wartość zmiennej wynikowej wyniosłaby 0%. Nie znaleziono uzasadnienia tych sytuacji w życiu codziennym, bowiem nie odnotowano jednoznaczej spadkowej lub wzrostowej zależności zarówno dla zmniennej *traveltime* jak i *studytime*. 
+
+```{r fig.align='center', fig.width = 10, fig.height = 4, echo=FALSE}
+grid.arrange(p11, p12, nrow = 1)
+```
+
+Ania zadeklarowała, że rodzice nie pomagają jej w nauce do szkoły. Zmiana tej stuacji, zatem otrzymanie pomocy od rodziców zwiększyłoby prawdopodobieństwo wystąpienia u Ani problemów z nadużywaniem alkoholu (wzrost wartości zmiennej wynikowej do nieco ponad 80%). Sytuacja ta stoi w sprzeczności z powszechnym poglądem. Gdyby Ania uczęszczała na zajęcia pozalekcyjne, wówczas odnotowanoby spadek wartości predykcji. Być może wypełnienie wolnego czasu dodatkowymi zajęciami przełożyłoby się na zmniejszenie okazji do spożywania alkoholu w nadmiernych ilościach. 
+
+```{r fig.align='center', fig.width = 10, fig.height = 4, echo=FALSE}
+grid.arrange(p13, p14, nrow = 1)
+```
+
+Brak dostępu do internetu zmniejszyłby prawdopodobienstwo wystąpienia u Ani problemów z nadużywaniem alkoholu. Gdyby Ania nie miała dostępu do sieci, wówczas wartość zmiennej wynikowej spadłaby o nieco ponad 12 punktów procentowych. Podobną sytuację odnotowano by w przypadku gdyby Ania nie znajdowała się obecnie w związku. Zgodnie z tym odcięcie od internetu oraz zerwanie z chłopakiem pozytywnie wpłynęłoby na Ani życie pod względem eliminacji problemu nadużywania alkoholu, co niekoniecznie pokrywa się z intuicją. Osamotnienie występujące w tej sytuacji mogłoby bowiem stanowić dla Ani trudną sytuację, a takie mogą przyczynić się do powstania nałogu. 
+
+```{r fig.align='center', fig.width = 10, fig.height = 4, echo=FALSE}
+grid.arrange(p15, p16, nrow = 1)
+```
+
+Ania ocenia relacje panujące w jej rodzinie jako dobre. Pogorszenie tych relacji ma różny wpływ na wartość predykcji, bowiem w przypadku oceny 'średnie' jak i 'złe' odnotowano by jej spadek, jednak gdyby Ania oceniła je jako bardzo złe, wówczas odnotowanoby wzrost wartości zmiennej objaśnianej. Wzrost spowodowałoby również określenie relacji jako bardzo dobre. 
+
+Wybrana dziewczynka jest zadwolona z czasu wolnego jakim dysponuje, bowiem ocenia, że ma go dużo. Jedynie brak czasu wolnego od szkoły spowodowałby nieznaczy wzrost wartości predykcji. Zarówno dla zmiennej *famrel* jak i *freetime* nie znaleziono uzasadnienia takich zmian wartości predykcji. 
+
+```{r fig.align='center', fig.width = 10, fig.height = 4, echo=FALSE}
+grid.arrange(p17, p18, nrow = 1)
+```
+
+Zgodnie z ankietą wypełnioną przez Anię spędza ona dużo czasu ze swoimi przyjaciółmi. Największy spadek wartości zmiennej wynikowej odnotowany był w przypadku gdyby dziewczyna wiekszość czasu spędzała w domu i bardzo rzadko wychodziła z przyjaciółmi. Być może spadek odnotowany w tej sytuacji wynikałby ze zmniejszenia okazji do spożywania alkoholu. Nie znaleziono uzasadnienia dla zmian wartości predykcji w przypadku pozostałych wartosci zmiennej *goout*. Spadek odnotowanoby w przypadku spędzania średniej ilości czasu ze znajomymi, w pozostałych sytuacjach odnotowanoby wzrost prawdopodobieństwa wystapienia u 15-latki problemów z nadużywaniem alkoholu. W przypadku zmiennej *Walc*, która odnosiła się do spożycia alkoholu w ciągu weekendu zauważono powiązanie z wartością zmiennej wynikowej. W przypadkach, gdyby Ania zadeklarowała mniejsze spożycie alkoholu podczas weekendu wartość predykcji zmniejszyłaby się. Odpowiednio zwiekszenie wartości zmiennej *Walc* wiąże się ze wzrostem wartości zmiennej wynikowej. Sytacja ta pokrywa się z intuicją, bowiem osoby spożywające więcej alkoholu mogą również częściej spożywać go w ciągu tygodnia. 
+
+```{r fig.align='left', fig.width = 4.75, fig.height = 3.75, echo=FALSE}
+grid.arrange(p19, nrow = 1)
+```
+
+Jedynie w przypadku oceny stanu zdrowia Ani na średni, odnotowanoby spadek wartości predykcji (o nieco ponad 15 punktów procentowych). W pozostałych przypadkach wartość zmiennej wynikowej wzrosłaby. Największy wzrost (do 90%) odnotowanoby w przypadku gdyby Ania uznała swój stan zdrowia jako dobry. Nie znaleziono uzasadnia tej sytuacji. 
+
+```{r fig.align='center', fig.width = 10, fig.height = 3,echo=FALSE}
+grid.arrange(p20, p21, p22, p23, nrow = 1)
+```
+
+Mama wybranej dziewczynki pracuje w sektorze usług. W przypadku zmiany miejsca pracy (*Mjob_services* = 0) odnotowanoby wzrost wartości zmiennej wynikowej do nieco ponad 85%. Sytuacja gdyby mama Ani nie pracowała tylko została w domu również negatywnie wpłynęłaby na Anię, bowiem zwiekszyłaby prawdopodobienstwo wystąpienia u niej problemu z nadużywaniem alkoholu (wartość zmniennej wynikowej na poziomie ponad 90%). Przeciwne przypadki, tj. spadek wartości predykcji odnotowanoby gdyby mama dziewczynki znalazła pracę jako nauczycielka (spadek o około 10 punktów procentowych) bądź w sektorze służby zdrowia (spadek o nieco ponad 40 pp). 
+
+```{r fig.align='center', fig.width = 10, fig.height = 3, echo=FALSE}
+grid.arrange(p24, p25, p26, p27, nrow = 1)
+```
+
+Tata Ani również zatrudniony jest w sektorze usług. W jego przypadku jednak zmiana pracy pozytywnie wpłynie na Anię, bowiem w tym przypadku (*Fjob_services* = 0) odnotowano by spadek wartości zmiennej wynikowej o około 10 punktów procentowych. Spadek prawdopodobieństwa wystąpienia u Ani problemów z alkoholem spowodowałaby również sytuacja gdyby jej tata zamiast pracować został w domu (*Fjob_at_home* = 1). Wzrost wartości zmiennej wynikowej do około 90% odnotowanoby gdyby tata dziewczynki był nauczycielem bądź pracował w sektorze służby zdrowia. 
+
+
+<br><br>
+
+### Wartości SHAP
+
+W koncowym etapie do analizy wpływu zmiennych na ostateczny wynik predykcji wykorzystano *wartości SHAP* (SHapley Additive exPlanations). 
+
+```{r,fig.align='center'}
+shap <- predict_parts(explainer = explain_glm, 
+                      new_observation = obs, 
+                      type = "shap")
+
+plot(shap)
+```
+
+Zaprezentowany wykres przedstawia zmienne objaśniające, w kolejności wybranej przez wykorzystaną fukcję.
+Zmienną, która w znacznym stopniu zwiększyła wartość predykcji jest *freetime*. Fakt, że Ania ma dopiero 15 lat wpłynął na zmniejszenie wartości zmiennej wynikowej. 
+
+<br><br>
+
+### Wykresy częściowej zależności (PDP)
+
+```{r}
+pdp_1 <- model_profile(explainer = explain_glm, 
+                       variables = "age")
+p1 <- plot(pdp_1) + ggtitle("Partial Dependence profile", subtitle = "")
+# ------------------------------------------------------------------------------
+pdp_2 <- model_profile(explainer = explain_glm, 
+                       variables = "absences")
+p2 <- plot(pdp_2) + ggtitle("Partial Dependence profile", subtitle = "")
+# ------------------------------------------------------------------------------
+pdp_3 <- model_profile(explainer = explain_glm, 
+                       variables = "sex", variable_type = "categorical")
+p3 <- plot(pdp_3) + ggtitle("Partial Dependence profile", subtitle = "")
+# ------------------------------------------------------------------------------
+pdp_4 <- model_profile(explainer = explain_glm, 
+                       variables = "address", variable_type = "categorical")
+p4 <- plot(pdp_4) + ggtitle("Partial Dependence profile", subtitle = "")
+# ------------------------------------------------------------------------------
+pdp_5 <- model_profile(explainer = explain_glm, 
+                       variables = "famsize", variable_type = "categorical")
+p5 <- plot(pdp_5) + ggtitle("Partial Dependence profile", subtitle = "")
+# ------------------------------------------------------------------------------
+pdp_6 <- model_profile(explainer = explain_glm, 
+                       variables = "Pstatus", variable_type = "categorical")
+p6 <- plot(pdp_6) + ggtitle("Partial Dependence profile", subtitle = "")
+# ------------------------------------------------------------------------------
+pdp_7 <- model_profile(explainer = explain_glm, 
+                       variables = "Medu", variable_type = "categorical")
+p7 <- plot(pdp_7) + ggtitle("Partial Dependence profile", subtitle = "")
+# ------------------------------------------------------------------------------
+pdp_8 <- model_profile(explainer = explain_glm, 
+                       variables = "Fedu", variable_type = "categorical")
+p8 <- plot(pdp_8) + ggtitle("Partial Dependence profile", subtitle = "")
+# ------------------------------------------------------------------------------
+pdp_9 <- model_profile(explainer = explain_glm, 
+                       variables = "traveltime", variable_type = "categorical")
+p9 <- plot(pdp_9) + ggtitle("Partial Dependence profile", subtitle = "")
+# ------------------------------------------------------------------------------
+pdp_10 <- model_profile(explainer = explain_glm, 
+                       variables = "studytime", variable_type = "categorical")
+p10 <- plot(pdp_10) + ggtitle("Partial Dependence profile", subtitle = "")
+# ------------------------------------------------------------------------------
+pdp_11 <- model_profile(explainer = explain_glm, 
+                       variables = "famsup", variable_type = "categorical")
+p11 <- plot(pdp_11) + ggtitle("Partial Dependence profile", subtitle = "")
+# ------------------------------------------------------------------------------
+pdp_12 <- model_profile(explainer = explain_glm, 
+                       variables = "activities", variable_type = "categorical")
+p12 <- plot(pdp_12) + ggtitle("Partial Dependence profile", subtitle = "")
+# ------------------------------------------------------------------------------
+pdp_13 <- model_profile(explainer = explain_glm, 
+                       variables = "internet", variable_type = "categorical")
+p13 <- plot(pdp_13) + ggtitle("Partial Dependence profile", subtitle = "")
+# ------------------------------------------------------------------------------
+pdp_14 <- model_profile(explainer = explain_glm, 
+                       variables = "romantic", variable_type = "categorical")
+p14 <- plot(pdp_14) + ggtitle("Partial Dependence profile", subtitle = "")
+# ------------------------------------------------------------------------------
+pdp_15 <- model_profile(explainer = explain_glm, 
+                       variables = "famrel", variable_type = "categorical")
+p15 <- plot(pdp_15) + ggtitle("Partial Dependence profile", subtitle = "")
+# ------------------------------------------------------------------------------
+pdp_16 <- model_profile(explainer = explain_glm, 
+                       variables = "freetime", variable_type = "categorical")
+p16 <- plot(pdp_16) + ggtitle("Partial Dependence profile", subtitle = "")
+# ------------------------------------------------------------------------------
+pdp_17 <- model_profile(explainer = explain_glm, 
+                       variables = "goout", variable_type = "categorical")
+p17 <- plot(pdp_17) + ggtitle("Partial Dependence profile", subtitle = "")
+# ------------------------------------------------------------------------------
+pdp_18 <- model_profile(explainer = explain_glm, 
+                       variables = "Walc", variable_type = "categorical")
+p18 <- plot(pdp_18) + ggtitle("Partial Dependence profile", subtitle = "")
+# ------------------------------------------------------------------------------
+pdp_19 <- model_profile(explainer = explain_glm, 
+                       variables = "health", variable_type = "categorical")
+p19 <- plot(pdp_19) + ggtitle("Partial Dependence profile", subtitle = "")
+# ------------------------------------------------------------------------------
+pdp_20 <- model_profile(explainer = explain_glm, 
+                       variables = "Mjob_at_home", variable_type = "categorical")
+p20 <- plot(pdp_20) + ggtitle("", subtitle = "")
+# ------------------------------------------------------------------------------
+pdp_21 <- model_profile(explainer = explain_glm, 
+                       variables = "Mjob_teacher", variable_type = "categorical")
+p21 <- plot(pdp_21) + ggtitle("", subtitle = "")
+# ------------------------------------------------------------------------------
+pdp_22 <- model_profile(explainer = explain_glm, 
+                       variables = "Mjob_services", variable_type = "categorical")
+p22 <- plot(pdp_22) + ggtitle("", subtitle = "")
+# ------------------------------------------------------------------------------
+pdp_23 <- model_profile(explainer = explain_glm, 
+                       variables = "Mjob_health", variable_type = "categorical")
+p23 <- plot(pdp_23) + ggtitle("", subtitle = "")
+# ------------------------------------------------------------------------------
+pdp_24 <- model_profile(explainer = explain_glm, 
+                       variables = "Fjob_at_home", variable_type = "categorical")
+p24 <- plot(pdp_24) + ggtitle("", subtitle = "")
+# ------------------------------------------------------------------------------
+pdp_25 <- model_profile(explainer = explain_glm, 
+                       variables = "Fjob_teacher", variable_type = "categorical")
+p25 <- plot(pdp_25) + ggtitle("", subtitle = "")
+# ------------------------------------------------------------------------------
+pdp_26 <- model_profile(explainer = explain_glm, 
+                       variables = "Fjob_services", variable_type = "categorical")
+p26 <- plot(pdp_26) + ggtitle("", subtitle = "")
+# ------------------------------------------------------------------------------
+pdp_27 <- model_profile(explainer = explain_glm, 
+                       variables = "Fjob_health", variable_type = "categorical")
+p27 <- plot(pdp_27) +  ggtitle("", subtitle = "")
+```
+
+
+```{r fig.align='center', fig.width = 10, fig.height = 4, echo=FALSE}
+grid.arrange(p1, p2, nrow = 1)
+```
+
+Wpływ zmiennej *age* oraz *absences* na wynik predykcji, uzyskanej przez model pokrywa się z wpływem przeanalizowanym dla wybranej obserwacji. 
+
+Wraz z wiekiem zwiększa się ryzyko wystąpienia problemów z nadużywaniem alkoholu. Zatem stworzony model z większym prawdopodobieństwem zaprognozuje pozytywną wartość zmiennej wynikowej dla osób starszych. Wzrost wartości predykcji odnotowano również wraz ze wzrostem nieobecności w szkole. 
+
+```{r fig.align='center', fig.width = 10, fig.height = 4, echo=FALSE}
+grid.arrange(p3, p4, nrow = 1)
+```
+
+Praktycznie nie występuje rozróżnienie wartości zmiennej wynikowej ze względu na płeć. Ososby zamieszkałe na terenach wiejskich mają większe prawdopodobienstwo wystąpienia u nich problemów z nadużywaniem alkoholu. 
+
+```{r fig.align='center', fig.width = 10, fig.height = 4, echo=FALSE}
+grid.arrange(p5, p6, nrow = 1)
+```
+
+W przypadku rodzin, w których rodzice znajdują się w separacji odnotowano nieznacznie niższe wartości zmiennej prognozowanej. Sytuacja ta nie pokrywa się z rzeczywistością. Wzrost wartości predykcji odnotowano gdy rodziny licza więcej niż 3 członków, tj. studenci posiadają rodzeństwo. 
+
+```{r fig.align='center', fig.width = 10, fig.height = 4, echo=FALSE}
+grid.arrange(p7, p8, nrow = 1)
+```
+
+Dla zmiennej *Medu* najwyższą wartość predykcji otrzymano w przypadku gdy mama ucznia/studenta nie ukończyła nawet szkoły podstawowej. 
+Odmiennie sytuacja wygląda w przypadku taty, który nie otrzymał edukacji, wtedy bowiem wartość zmiennej wynikowej wynosi 0%. Dla zmiennej *Fedu* najwyższe prawdopodobieństwo wystąpienia problemów z nadużywaniem alkoholu występuje w przypadku otrzymania przez ojca dyplomu ukończenia studiów wyższych. 
+
+```{r fig.align='center', fig.width = 10, fig.height = 4, echo=FALSE}
+grid.arrange(p9, p10, nrow = 1)
+```
+
+W przypadku zmiennej *traveltime* najniższe prawdopodobieństwo wystapienia u ankietowanego problemów z nadużywaniem alkoholu występuje w przypadku, gdy na dojazd do szkoły potrzebuje on od 30 minut do godziny. Jednak zwiększenie tego czasu do ponad godziny skutkuje znacznym spadkiem wartości predykcji. 
+W przypadku czasu poświęcanego tygodniowo na naukę najlepszą wartością dla badanego ucznia okazał się przedzial czasowy od 5 do 10 godzin. W tym przypadku bowiem wartość predykcji jest najniższa. Zbliżone wartości otrzymano dla sytuacji gdy student uczy się mniej niż 2 godziny lub więcej niż 10. Nie znaleziono uzasadnienia tych wahań. 
+
+```{r fig.align='center', fig.width = 10, fig.height = 4, echo=FALSE}
+grid.arrange(p11, p12, nrow = 1)
+```
+
+Analizując wsparcie otrzymywane od rodziców podczas nauki nie zauważono znaczącej różnicy we wpływie na wartość zmiennej prognozowanej. Nieznacznie wyższą wartość otrzymano w przypadku, gdy rodzice pomagają w nauce. W przypadku gdy uczeń/student nie uczęszcza na zajęcia pozalekcyjne nieznacznie wzrasta prawdopodobieństwo wystąpienia u niego problemów z alkoholem. 
+
+```{r fig.align='center', fig.width = 10, fig.height = 4, echo=FALSE}
+grid.arrange(p13, p14, nrow = 1)
+```
+
+Większe wartości zmiennej wynikowej odnotowano w przypadku posiadania przez ankietowanego dostępu do internetu. Również w sytuacji bycia w związku odnotowano wyższą wartość predykcji. 
+
+```{r fig.align='center', fig.width = 10, fig.height = 4, echo=FALSE}
+grid.arrange(p15, p16, nrow = 1)
+```
+
+Najniższą wartość zmiennej wynikowej otrzymano w przypadku określenia relacji rodzinnych jako "złe". Wraz z polepszeniem relacji panujących w rodzinie studenta zwiększa się wartość predykcji. Najwyższą wartość uzyskano jednak przy określeniu relacji jako "bardzo złe", w związku z czym nie znaleziono uzasadnienia w realnym życiu. Zmian zmiennej *freetime* również nie uzasadniono, ze względu na występujące wahania. Najniższą wartość zmiennej wynikowej otrzymano w przypadku gdy uczeń/student średnio dysponuje czasem wolnym od szkoły, jednak zmniejszenie tego czasu do wartości "bardzo mało" skutkuje wzrostem wartości predykcji do poziomu około 60%, co stanowi najwyższą wartość otrzymaną w przypadku zmiennej *fretime*.
+
+```{r fig.align='center', fig.width = 10, fig.height = 4, echo=FALSE}
+grid.arrange(p17, p18, nrow = 1)
+```
+
+Najwyższą wartość predykjci osiągnieto w przypadku gdy ankietowany mało czasu spędza z przyjaciółmi, jednak w przypadku daleszego ograniczania tego czasu (*goout* = 1) wartość predykcji jest najmnijesza. W związku z tym nie znaleziono uzasadnienia tej sytuacji.
+Wraz ze wzrostem wartości zmiennej *Walc* odnotowano wzrost wartości zmiennej prognozowanej. Zatem zwiększona częstość spożywania alkoholu podczas weekendu przekłada się na większe prawdopodobieństwo wystąpienia problemu z nadużywaniem alkoholu. 
+
+```{r fig.align='left', fig.width = 4.75, fig.height = 3.75, echo=FALSE}
+grid.arrange(p19, nrow = 1)
+```
+
+Analizując stan zdrowia ankietowanego nie zauważono wyraźnych zależności. Najniższą wartość zmiennej prognozowanej otrzymano w przypadku określenia w ankiecie stanu zdrowia jako "średni", natomiast już określenie go jako "bardzo zły" bądź "dobry" znacznie zwiększa wartość prognozy. 
+
+```{r fig.align='center', fig.height = 4, echo=FALSE}
+grid.arrange(p20, p21, p22, p23, nrow = 1)
+```
+
+Dla zmiennych *Mjob_teacher*, *Mjob_services* oraz *Mjob_health* wyższe wartości osiągnięto, w przypadku gdy mama wykonuje inną pracę niż wskazaną. Odmienną sytuację zaobserwowano dla zmiennej *Mjob_at_home*, wówczas wyższą wartość otrzymano w przypadku pozytywnej wartości tej zmiennej. Zatem przypadek gdy mama ankietowanego nie pracuje zwiększa się prawdopodobieństwo wystąpienia u niego problemu z nadużywaniem alkoholu. 
+
+```{r fig.align='center', fig.height = 4, echo=FALSE}
+grid.arrange(p24, p25, p26, p27, nrow = 1)
+```
+
+W przypadku gdy tata danego ucznia/studenta nie pracuje wartości predykcji różnią się od tych otrzymanych w sytuacji gdy bez pracy pozostaje jego mama. Wartość zmiennej wynikowej jest bowiem wyższa gdy ojciec jest czynny zawodowo. W pozostałych przypadkach każdy wykonywany zawód (tj. nauczyciel bądź praca w sektorze usług czy też w sektorze medycznym) zwiększa wartość otrzymywanej predykcji. 
+
+<br><br>
+
+## Podsumowanie
+
+Celem projektu było stworzenie modelu, który na podstawie informacji dostępnych z ankiet przeprowadzonych wśród uczniów/studentów będzie w stanie wskazać nauczycielom uczniów, którzy mogą potrzebować pomocy. 
+
+W tym celu po przeprowadzeniu wstępnej analizy oraz odpowiednim przygotowaniu danych, w tym wykorzystania oversamplingu do zbalansowania zbioru uczącego, zbudowano trzy modele. Wykorzystano następujące metody uczenia maszynowego: lasy losowe, algorytm SVM z jądrem radialnym oraz regresję logistyczną. Najwyższą wartość czułości, którą uznano za najważniejszy wskaźnik jakości modelu otrzymano dla modelu zbudowanego z wykorzystaniem SVM. 
+
+Analiza ważności zmiennych dla modelu utworzonego za pomocą lasów losowych wskazała na istotność zmiennej *Walc*. Na kolejnych miejscach znalazły się odpowiednio *goout* oraz *freetime*. Analiza interpretowalności modelu regresji logistycznej pozwoliła na wyłonienie zależności między zmienną *Walc* i zmienną wynikową. Większe spożycie alkoholu podczas weekendu przekłada się bowiem na wzrost wartości predykcji. Zauważono również, że wraz z wiekiem bądź rosnącą liczbą nieobecności w szkole model przywiduje wyższe wartości prognozy. W przypadku większości zmiennych nie znaleziono jednak uzasadnienia w życiu rzeczywistym. 
+
+<br><br>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
